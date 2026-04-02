@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Chord Progression Generator</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="hero">
+        <p class="eyebrow">Harmony Lab</p>
+        <h1>Build rich chord progressions, audition them, and export straight to MIDI.</h1>
+        <p class="hero-copy">
+          Pick a key, choose chord density, control progression length, and let theory-aware harmony
+          generate everything from diatonic movement to borrowed and dominant-color chords.
+        </p>
+      </header>
+
+      <main class="layout">
+        <section class="panel controls-panel">
+          <div class="panel-heading">
+            <h2>Generator</h2>
+            <p>Shape the harmonic palette before generating a new progression.</p>
+          </div>
+
+          <form id="generator-form" class="controls-grid">
+            <label>
+              <span>Key center</span>
+              <select id="key-root" name="keyRoot"></select>
+            </label>
+
+            <label>
+              <span>Mode</span>
+              <select id="scale-type" name="scaleType"></select>
+            </label>
+
+            <label>
+              <span>Chord size</span>
+              <input id="chord-size" name="chordSize" type="range" min="3" max="7" value="4" />
+              <output id="chord-size-value" for="chord-size">4 notes</output>
+            </label>
+
+            <label>
+              <span>Progression length</span>
+              <input id="progression-length" name="progressionLength" type="range" min="2" max="12" value="4" />
+              <output id="progression-length-value" for="progression-length">4 chords</output>
+            </label>
+
+            <label>
+              <span>Tempo</span>
+              <input id="tempo" name="tempo" type="range" min="70" max="180" value="110" />
+              <output id="tempo-value" for="tempo">110 BPM</output>
+            </label>
+
+            <label class="toggle">
+              <span>Include non-diatonic color</span>
+              <input id="include-color" name="includeColor" type="checkbox" checked />
+            </label>
+
+            <label class="toggle">
+              <span>Prefer strong cadences</span>
+              <input id="prefer-cadence" name="preferCadence" type="checkbox" checked />
+            </label>
+
+            <label class="toggle">
+              <span>Unique chords only</span>
+              <input id="unique-chords" name="uniqueChordsOnly" type="checkbox" />
+            </label>
+
+            <div class="button-row">
+              <button type="submit" class="primary">Generate progression</button>
+              <button type="button" id="play-progression">Play</button>
+              <button type="button" id="download-midi">Download MIDI</button>
+            </div>
+          </form>
+
+          <div class="legend">
+            <div>
+              <strong>Theory engine</strong>
+              <p>Diatonic chords, modal interchange, secondary dominants, suspended colors, and altered dominants.</p>
+            </div>
+            <div>
+              <strong>Export</strong>
+              <p>Creates a standard MIDI file you can drag directly into Ableton Live.</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel results-panel">
+          <div class="panel-heading">
+            <h2>Progression</h2>
+            <p id="progression-meta">Generate a progression to see the harmony breakdown.</p>
+          </div>
+
+          <div id="progression-list" class="progression-list"></div>
+
+          <section class="analysis-card">
+            <h3>What’s happening</h3>
+            <div id="analysis-copy">
+              The generator will explain the harmonic role of each chord here after you create one.
+            </div>
+          </section>
+        </section>
+      </main>
+    </div>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
