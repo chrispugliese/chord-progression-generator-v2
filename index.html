@@ -41,44 +41,131 @@
               <select id="scale-type" name="scaleType"></select>
             </label>
 
-            <label>
-              <span>Chord size</span>
-              <input id="chord-size" name="chordSize" type="range" min="3" max="7" value="4" />
-              <output id="chord-size-value" for="chord-size">4 notes</output>
-            </label>
-
-            <label>
-              <span>Progression length</span>
-              <input id="progression-length" name="progressionLength" type="range" min="2" max="12" value="4" />
-              <output id="progression-length-value" for="progression-length">4 chords</output>
-            </label>
-
-            <label>
-              <span>Tempo</span>
-              <input id="tempo" name="tempo" type="range" min="70" max="180" value="110" />
-              <output id="tempo-value" for="tempo">110 BPM</output>
-            </label>
-
-            <label class="toggle">
-              <span>Include non-diatonic color</span>
-              <input id="include-color" name="includeColor" type="checkbox" checked />
-            </label>
-
-            <label class="toggle">
-              <span>Prefer strong cadences</span>
-              <input id="prefer-cadence" name="preferCadence" type="checkbox" checked />
-            </label>
-
-            <label class="toggle">
-              <span>Unique chords only</span>
-              <input id="unique-chords" name="uniqueChordsOnly" type="checkbox" />
-            </label>
-
             <div class="button-row">
               <button type="submit" class="primary">Generate progression</button>
               <button type="button" id="play-progression">Play</button>
+              <button type="button" id="stop-playback">Stop</button>
               <button type="button" id="download-midi">Download MIDI</button>
             </div>
+
+            <details class="controls-drawer" open>
+              <summary>
+                <span>Advanced Controls</span>
+                <small>Open harmony, playback, and variation settings</small>
+              </summary>
+
+              <div class="drawer-sections">
+                <section class="drawer-section">
+                  <div class="drawer-heading">
+                    <h3>Harmony</h3>
+                    <p>Shape chord density and overall progression size.</p>
+                  </div>
+
+                  <div class="section-grid">
+                    <label>
+                      <span>Chord size</span>
+                      <input id="chord-size" name="chordSize" type="range" min="3" max="7" value="4" />
+                      <output id="chord-size-value" for="chord-size">4 notes</output>
+                    </label>
+
+                    <label>
+                      <span>Progression length</span>
+                      <input id="progression-length" name="progressionLength" type="range" min="2" max="12" value="4" />
+                      <output id="progression-length-value" for="progression-length">4 chords</output>
+                    </label>
+
+                    <label class="toggle">
+                      <span>Include non-diatonic color</span>
+                      <input id="include-color" name="includeColor" type="checkbox" checked />
+                    </label>
+
+                    <label class="toggle">
+                      <span>Prefer strong cadences</span>
+                      <input id="prefer-cadence" name="preferCadence" type="checkbox" checked />
+                    </label>
+
+                    <label class="toggle">
+                      <span>Unique chords only</span>
+                      <input id="unique-chords" name="uniqueChordsOnly" type="checkbox" />
+                    </label>
+                  </div>
+                </section>
+
+                <section class="drawer-section">
+                  <div class="drawer-heading">
+                    <h3>Playback</h3>
+                    <p>Control how the progression sounds and sits in range.</p>
+                  </div>
+
+                  <div class="section-grid">
+                    <label>
+                      <span>Tempo</span>
+                      <input id="tempo" name="tempo" type="range" min="70" max="180" value="110" />
+                      <output id="tempo-value" for="tempo">110 BPM</output>
+                    </label>
+
+                    <label>
+                      <span>Playback voice</span>
+                      <select id="waveform" name="waveform">
+                        <option value="sine">Sine</option>
+                        <option value="triangle" selected>Triangle</option>
+                        <option value="sawtooth">Saw</option>
+                      </select>
+                    </label>
+
+                    <label>
+                      <span>Note length</span>
+                      <input id="note-length" name="noteLengthBeats" type="range" min="1" max="8" step="1" value="4" />
+                      <output id="note-length-value" for="note-length">4 beats</output>
+                    </label>
+
+                    <label>
+                      <span>Octave</span>
+                      <input id="octave" name="octave" type="range" min="2" max="5" step="1" value="3" />
+                      <output id="octave-value" for="octave">Octave 3</output>
+                    </label>
+
+                    <label>
+                      <span>Articulation</span>
+                      <select id="articulation" name="articulation">
+                        <option value="normal">Normal</option>
+                        <option value="staccato">Staccato</option>
+                        <option value="sustain">Sustain</option>
+                      </select>
+                    </label>
+                  </div>
+                </section>
+
+                <section class="drawer-section">
+                  <div class="drawer-heading">
+                    <h3>Variation</h3>
+                    <p>Add motion and feel without changing the core harmony.</p>
+                  </div>
+
+                  <div class="section-grid">
+                    <label>
+                      <span>Arp length</span>
+                      <select id="arp-length" name="arpLengthBeats">
+                        <option value="1">1/4</option>
+                        <option value="0.5">1/8</option>
+                        <option value="0.25" selected>1/16</option>
+                        <option value="0.125">1/32</option>
+                      </select>
+                    </label>
+
+                    <label class="toggle">
+                      <span>Arpeggiate chords</span>
+                      <input id="arpeggiate" name="arpeggiate" type="checkbox" />
+                    </label>
+
+                    <label class="toggle">
+                      <span>Humanize timing</span>
+                      <input id="humanize" name="humanize" type="checkbox" />
+                    </label>
+                  </div>
+                </section>
+              </div>
+            </details>
           </form>
 
           <div class="legend">

@@ -108,9 +108,16 @@ const state = {
     chordSize: 4,
     progressionLength: 4,
     tempo: 110,
+    waveform: "triangle",
+    noteLengthBeats: 4,
+    octave: 3,
+    articulation: "normal",
     includeColor: true,
     preferCadence: true,
-    uniqueChordsOnly: false
+    uniqueChordsOnly: false,
+    arpeggiate: false,
+    arpLengthBeats: 0.25,
+    humanize: false
   },
   progression: []
 };
@@ -124,16 +131,28 @@ const progressionLengthInput = document.querySelector("#progression-length");
 const progressionLengthValue = document.querySelector("#progression-length-value");
 const tempoInput = document.querySelector("#tempo");
 const tempoValue = document.querySelector("#tempo-value");
+const waveformSelect = document.querySelector("#waveform");
+const noteLengthInput = document.querySelector("#note-length");
+const noteLengthValue = document.querySelector("#note-length-value");
+const arpLengthInput = document.querySelector("#arp-length");
+const octaveInput = document.querySelector("#octave");
+const octaveValue = document.querySelector("#octave-value");
+const articulationSelect = document.querySelector("#articulation");
 const includeColorInput = document.querySelector("#include-color");
 const preferCadenceInput = document.querySelector("#prefer-cadence");
 const uniqueChordsInput = document.querySelector("#unique-chords");
+const arpeggiateInput = document.querySelector("#arpeggiate");
+const humanizeInput = document.querySelector("#humanize");
 const progressionList = document.querySelector("#progression-list");
 const progressionMeta = document.querySelector("#progression-meta");
 const analysisCopy = document.querySelector("#analysis-copy");
 const playButton = document.querySelector("#play-progression");
+const stopButton = document.querySelector("#stop-playback");
 const downloadButton = document.querySelector("#download-midi");
 
 let audioContext;
+const activeOscillators = new Set();
+let hasGeneratedProgression = false;
 
 populateKeys();
 populateScaleTypes();
@@ -146,8 +165,28 @@ form.addEventListener("submit", (event) => {
   generateAndRender();
 });
 
-[chordSizeInput, progressionLengthInput, tempoInput].forEach((input) => {
-  input.addEventListener("input", syncOutputs);
+[chordSizeInput, progressionLengthInput, tempoInput, noteLengthInput, octaveInput].forEach((input) => {
+  input.addEventListener("input", () => {
+    syncOutputs();
+    state.settings = getSettingsFromForm();
+  });
+});
+
+[
+  keyRootSelect,
+  scaleTypeSelect,
+  waveformSelect,
+  articulationSelect,
+  includeColorInput,
+  preferCadenceInput,
+  uniqueChordsInput,
+  arpeggiateInput,
+  arpLengthInput,
+  humanizeInput
+].forEach((input) => {
+  input.addEventListener("change", () => {
+    state.settings = getSettingsFromForm();
+  });
 });
 
 playButton.addEventListener("click", () => {
@@ -155,7 +194,18 @@ playButton.addEventListener("click", () => {
     return;
   }
 
-  playProgression(state.progression, state.settings.tempo);
+  stopPlayback();
+  playProgression(
+    state.progression,
+    state.settings.tempo,
+    state.settings.noteLengthBeats,
+    state.settings.waveform,
+    state.settings
+  );
+});
+
+stopButton.addEventListener("click", () => {
+  stopPlayback();
 });
 
 downloadButton.addEventListener("click", () => {
@@ -168,8 +218,14 @@ downloadButton.addEventListener("click", () => {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   const keyLabel = NOTE_NAMES[state.settings.keyRoot].short;
+  const exportDate = new Date().toISOString().slice(0, 10);
+  const optionFlags = [
+    state.settings.articulation,
+    state.settings.arpeggiate ? `arp${formatArpDivision(state.settings.arpLengthBeats)}` : "block",
+    state.settings.humanize ? "human" : "quantized"
+  ].join("-");
   anchor.href = url;
-  anchor.download = `${keyLabel}-${state.settings.scaleType}-progression.mid`;
+  anchor.download = `${keyLabel}-${state.settings.scaleType}-${state.settings.tempo}bpm-${state.settings.noteLengthBeats}beats-oct${state.settings.octave}-${optionFlags}-${exportDate}.mid`;
   anchor.click();
   URL.revokeObjectURL(url);
 });
@@ -191,6 +247,8 @@ function syncOutputs() {
   chordSizeValue.textContent = `${chordSizeInput.value} notes`;
   progressionLengthValue.textContent = `${progressionLengthInput.value} chords`;
   tempoValue.textContent = `${tempoInput.value} BPM`;
+  noteLengthValue.textContent = `${noteLengthInput.value} ${Number(noteLengthInput.value) === 1 ? "beat" : "beats"}`;
+  octaveValue.textContent = `Octave ${octaveInput.value}`;
 }
 
 function getSettingsFromForm() {
@@ -200,14 +258,23 @@ function getSettingsFromForm() {
     chordSize: Number(chordSizeInput.value),
     progressionLength: Number(progressionLengthInput.value),
     tempo: Number(tempoInput.value),
+    waveform: waveformSelect.value,
+    noteLengthBeats: Number(noteLengthInput.value),
+    arpLengthBeats: Number(arpLengthInput.value),
+    octave: Number(octaveInput.value),
+    articulation: articulationSelect.value,
     includeColor: includeColorInput.checked,
     preferCadence: preferCadenceInput.checked,
-    uniqueChordsOnly: uniqueChordsInput.checked
+    uniqueChordsOnly: uniqueChordsInput.checked,
+    arpeggiate: arpeggiateInput.checked,
+    humanize: humanizeInput.checked
   };
 }
 
 function generateAndRender() {
+  stopPlayback();
   state.progression = generateProgression(state.settings);
+  hasGeneratedProgression = true;
   renderProgression();
 }
 
@@ -252,7 +319,7 @@ function generateProgression(settings) {
     usedChordIds.add(chosen.id);
   }
 
-  return smoothVoiceLeading(progression, settings.chordSize);
+  return smoothVoiceLeading(progression, settings.chordSize, settings.octave);
 }
 
 function chooseCandidates(pool, previousChord, shouldEnd, settings) {
@@ -553,11 +620,11 @@ function getWeight(chord) {
   return weightBySource[chord.source] ?? 1;
 }
 
-function smoothVoiceLeading(progression, chordSize) {
+function smoothVoiceLeading(progression, chordSize, octave) {
   let previousMidi = null;
 
   return progression.map((chord, index) => {
-    const notes = buildVoicing(chord.rootPc, chord.qualityKey, chordSize, previousMidi);
+    const notes = buildVoicing(chord.rootPc, chord.qualityKey, chordSize, previousMidi, octave);
     previousMidi = notes;
     return {
       ...chord,
@@ -568,8 +635,8 @@ function smoothVoiceLeading(progression, chordSize) {
   });
 }
 
-function buildVoicing(rootPc, qualityKey, chordSize, previousMidi) {
-  const rootMidi = 48 + rootPc;
+function buildVoicing(rootPc, qualityKey, chordSize, previousMidi, octave) {
+  const rootMidi = (octave + 1) * 12 + rootPc;
   const intervals = [...QUALITY_LIBRARY[qualityKey].intervals];
 
   while (intervals.length < chordSize) {
@@ -596,14 +663,20 @@ function buildVoicing(rootPc, qualityKey, chordSize, previousMidi) {
   }
 
   notes.sort((a, b) => a - b);
+  notes = spreadCluster(notes);
 
-  while (notes[0] < 42) {
+  const minimumMidi = octave * 12 + 12;
+  const maximumMidi = minimumMidi + 36;
+
+  while (notes[0] < minimumMidi) {
     notes = notes.map((note) => note + 12);
   }
 
-  while (notes[notes.length - 1] > 86) {
+  while (notes[notes.length - 1] > maximumMidi) {
     notes = notes.map((note) => note - 12);
   }
+
+  notes = spreadCluster(notes);
 
   return notes;
 }
@@ -615,7 +688,8 @@ function renderProgression() {
   }
 
   const keyName = `${NOTE_NAMES[state.settings.keyRoot].short} ${SCALES[state.settings.scaleType].label}`;
-  progressionMeta.textContent = `${keyName} • ${state.settings.progressionLength} chords • ${state.settings.chordSize} notes per chord • ${state.settings.tempo} BPM`;
+  const texture = state.settings.arpeggiate ? "arpeggiated" : "block chords";
+  progressionMeta.textContent = `${keyName} • ${state.settings.progressionLength} chords • ${state.settings.chordSize} notes per chord • ${state.settings.tempo} BPM • ${texture}`;
 
   progressionList.innerHTML = state.progression.map((chord) => {
     const quality = QUALITY_LIBRARY[chord.qualityKey];
@@ -650,13 +724,14 @@ function renderProgression() {
     This progression begins in a ${FUNCTION_LABELS[state.progression[0].functionGroup].toLowerCase()} space, moves through
     ${state.progression.slice(1).map((chord) => FUNCTION_LABELS[chord.functionGroup].toLowerCase()).join(", ")},
     and keeps the voicings close for smoother playback and cleaner MIDI clips.
-    <div class="analysis-tags">${analysisTags}</div>
+      <div class="analysis-tags">${analysisTags}</div>
   `;
 
   progressionList.querySelectorAll("[data-play-index]").forEach((button) => {
     button.addEventListener("click", () => {
       const chord = state.progression[Number(button.dataset.playIndex)];
-      playChord(chord.midiNotes, 1.8);
+      const isolatedPlan = buildPerformancePlan([chord], state.settings);
+      playPerformancePlan(isolatedPlan, state.settings.waveform, state.settings.articulation);
     });
   });
 }
@@ -673,37 +748,54 @@ function ensureAudioContext() {
   return audioContext;
 }
 
-function playChord(midiNotes, durationSeconds, startTime = 0) {
+function stopPlayback() {
+  activeOscillators.forEach((oscillator) => {
+    try {
+      oscillator.stop();
+    } catch {
+      return;
+    }
+  });
+  activeOscillators.clear();
+}
+
+function playChord(midiNotes, durationSeconds, startTime = 0, waveform = "triangle", velocities = [], articulation = "normal") {
   const context = ensureAudioContext();
   const now = context.currentTime + startTime;
+  const profile = getArticulationProfile(articulation);
 
   midiNotes.forEach((midi, index) => {
     const frequency = midiToFrequency(midi);
     const oscillator = context.createOscillator();
     const gain = context.createGain();
 
-    oscillator.type = index === 0 ? "triangle" : "sine";
+    oscillator.type = waveform;
     oscillator.frequency.value = frequency;
 
+    const velocityScale = (velocities[index] ?? 96) / 127;
+    const peakGain = getVoiceGain(waveform, index) * velocityScale;
+
     gain.gain.setValueAtTime(0.0001, now);
-    gain.gain.exponentialRampToValueAtTime(0.16 / (index + 0.6), now + 0.03);
-    gain.gain.exponentialRampToValueAtTime(0.08 / (index + 0.8), now + durationSeconds * 0.55);
+    gain.gain.exponentialRampToValueAtTime(peakGain, now + 0.03);
+    gain.gain.exponentialRampToValueAtTime(peakGain * profile.sustainLevel, now + durationSeconds * profile.decayPoint);
     gain.gain.exponentialRampToValueAtTime(0.0001, now + durationSeconds);
 
     oscillator.connect(gain);
     gain.connect(context.destination);
+    activeOscillators.add(oscillator);
+    oscillator.onended = () => {
+      activeOscillators.delete(oscillator);
+      oscillator.disconnect();
+      gain.disconnect();
+    };
     oscillator.start(now);
     oscillator.stop(now + durationSeconds + 0.04);
   });
 }
 
-function playProgression(progression, tempo) {
-  const beatsPerChord = 4;
-  const chordDuration = (60 / tempo) * beatsPerChord;
-
-  progression.forEach((chord, index) => {
-    playChord(chord.midiNotes, chordDuration * 0.92, index * chordDuration);
-  });
+function playProgression(progression, tempo, noteLengthBeats, waveform, settings) {
+  const performancePlan = buildPerformancePlan(progression, settings);
+  playPerformancePlan(performancePlan, waveform, settings.articulation);
 }
 
 function buildMidiFile(progression, tempo) {
@@ -717,22 +809,14 @@ function buildMidiFile(progression, tempo) {
 
   const trackEvents = [];
   const microsecondsPerQuarter = Math.floor(60000000 / tempo);
-  const chordLengthTicks = 480 * 4;
+  const performancePlan = buildPerformancePlan(progression, state.settings);
 
   trackEvents.push(0x00, 0xff, 0x51, 0x03,
     (microsecondsPerQuarter >> 16) & 0xff,
     (microsecondsPerQuarter >> 8) & 0xff,
     microsecondsPerQuarter & 0xff);
 
-  progression.forEach((chord) => {
-    chord.midiNotes.forEach((note, index) => {
-      trackEvents.push(...encodeVariableLength(index === 0 ? 0 : 0), 0x90, note, 84);
-    });
-
-    chord.midiNotes.forEach((note, index) => {
-      trackEvents.push(...encodeVariableLength(index === 0 ? chordLengthTicks : 0), 0x80, note, 0);
-    });
-  });
+  appendMidiEvents(trackEvents, performancePlan);
 
   trackEvents.push(0x00, 0xff, 0x2f, 0x00);
 
@@ -767,6 +851,167 @@ function encodeVariableLength(value) {
   }
 
   return bytes;
+}
+
+function getNoteDurationSeconds(tempo, noteLengthBeats) {
+  return (60 / tempo) * noteLengthBeats;
+}
+
+function buildPerformancePlan(progression, settings) {
+  const noteLengthBeats = settings.noteLengthBeats;
+  const gate = getArticulationProfile(settings.articulation).gate;
+  const humanizeWindow = settings.humanize ? Math.min(0.045, getNoteDurationSeconds(settings.tempo, noteLengthBeats) * 0.035) : 0;
+  const events = [];
+
+  progression.forEach((chord, chordIndex) => {
+    const chordStartSeconds = chordIndex * getNoteDurationSeconds(settings.tempo, noteLengthBeats);
+    const chordStartTicks = chordIndex * noteLengthBeats * 480;
+    const stepBeats = settings.arpeggiate ? getArpeggioStepBeats(chord.midiNotes.length, settings.arpLengthBeats) : 0;
+
+    chord.midiNotes.forEach((note, noteIndex) => {
+      const noteStartSeconds = chordStartSeconds + (stepBeats * noteIndex * 60) / settings.tempo;
+      const noteStartTicks = chordStartTicks + Math.round(stepBeats * noteIndex * 480);
+      const randomizedOffset = humanizeWindow ? randomBetween(-humanizeWindow, humanizeWindow) : 0;
+      const randomizedTickOffset = humanizeWindow ? Math.round((randomizedOffset * settings.tempo * 480) / 60) : 0;
+      const durationSeconds = getNoteDurationSeconds(settings.tempo, noteLengthBeats) * gate;
+      const durationTicks = Math.max(60, Math.round(noteLengthBeats * 480 * gate));
+      const velocity = clamp(
+        settings.humanize ? 84 + Math.round(randomBetween(-12, 12)) : 92 - noteIndex * 4,
+        30,
+        118
+      );
+
+      events.push({
+        startSeconds: Math.max(0, noteStartSeconds + randomizedOffset),
+        durationSeconds,
+        startTicks: Math.max(0, noteStartTicks + randomizedTickOffset),
+        durationTicks,
+        note,
+        velocity
+      });
+    });
+  });
+
+  events.sort((left, right) => {
+    if (left.startTicks !== right.startTicks) {
+      return left.startTicks - right.startTicks;
+    }
+    return left.note - right.note;
+  });
+
+  return events;
+}
+
+function playPerformancePlan(events, waveform, articulation = "normal") {
+  const grouped = new Map();
+
+  events.forEach((event) => {
+    const key = `${event.startSeconds.toFixed(3)}-${event.durationSeconds.toFixed(3)}`;
+    const group = grouped.get(key) ?? { startSeconds: event.startSeconds, durationSeconds: event.durationSeconds, notes: [], velocities: [] };
+    group.notes.push(event.note);
+    group.velocities.push(event.velocity);
+    grouped.set(key, group);
+  });
+
+  [...grouped.values()].forEach((group) => {
+    playChord(group.notes, group.durationSeconds, group.startSeconds, waveform, group.velocities, articulation);
+  });
+}
+
+function appendMidiEvents(trackEvents, events) {
+  const midiEvents = [];
+
+  events.forEach((event) => {
+    midiEvents.push({ tick: event.startTicks, type: "on", note: event.note, velocity: event.velocity });
+    midiEvents.push({ tick: event.startTicks + event.durationTicks, type: "off", note: event.note, velocity: 0 });
+  });
+
+  midiEvents.sort((left, right) => {
+    if (left.tick !== right.tick) {
+      return left.tick - right.tick;
+    }
+    if (left.type !== right.type) {
+      return left.type === "off" ? -1 : 1;
+    }
+    return left.note - right.note;
+  });
+
+  let previousTick = 0;
+
+  midiEvents.forEach((event) => {
+    const delta = Math.max(0, event.tick - previousTick);
+    trackEvents.push(...encodeVariableLength(delta), event.type === "on" ? 0x90 : 0x80, event.note, event.velocity);
+    previousTick = event.tick;
+  });
+}
+
+function getArticulationProfile(articulation) {
+  const articulationMap = {
+    normal: {
+      gate: 0.99,
+      decayPoint: 0.82,
+      sustainLevel: 0.7
+    },
+    staccato: {
+      gate: 0.42,
+      decayPoint: 0.35,
+      sustainLevel: 0.32
+    },
+    sustain: {
+      gate: 1.12,
+      decayPoint: 0.92,
+      sustainLevel: 0.82
+    }
+  };
+  return articulationMap[articulation] ?? articulationMap.normal;
+}
+
+function getArpeggioStepBeats(noteCount, arpLengthBeats) {
+  if (noteCount <= 1) {
+    return 0;
+  }
+
+  return arpLengthBeats / (noteCount - 1);
+}
+
+function formatArpDivision(arpLengthBeats) {
+  const divisionMap = {
+    1: "1-4",
+    0.5: "1-8",
+    0.25: "1-16",
+    0.125: "1-32"
+  };
+
+  return divisionMap[arpLengthBeats] ?? arpLengthBeats;
+}
+
+function spreadCluster(notes) {
+  const spread = [...notes].sort((left, right) => left - right);
+
+  for (let index = 1; index < spread.length; index += 1) {
+    while (spread[index] <= spread[index - 1]) {
+      spread[index] += 12;
+    }
+  }
+
+  return spread;
+}
+
+function getVoiceGain(waveform, index) {
+  const baseByWaveform = {
+    sine: 0.13,
+    triangle: 0.16,
+    sawtooth: 0.1
+  };
+  return (baseByWaveform[waveform] ?? 0.14) / (index + 0.8);
+}
+
+function randomBetween(min, max) {
+  return min + Math.random() * (max - min);
+}
+
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
 }
 
 function midiToFrequency(midi) {

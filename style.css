@@ -121,6 +121,75 @@ output,
   margin-top: 22px;
 }
 
+.controls-drawer {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.03);
+  overflow: hidden;
+}
+
+.controls-drawer summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 16px 18px;
+  display: grid;
+  gap: 6px;
+  background:
+    linear-gradient(140deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02)),
+    rgba(255, 255, 255, 0.03);
+}
+
+.controls-drawer summary::-webkit-details-marker {
+  display: none;
+}
+
+.controls-drawer summary span {
+  font-size: 0.96rem;
+  font-weight: 700;
+}
+
+.controls-drawer summary small {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.drawer-sections {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+}
+
+.drawer-section {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.drawer-heading {
+  display: grid;
+  gap: 6px;
+}
+
+.drawer-heading h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.drawer-heading p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.45;
+  font-size: 0.9rem;
+}
+
+.section-grid {
+  display: grid;
+  gap: 14px;
+}
+
 label {
   display: grid;
   gap: 10px;
@@ -172,13 +241,16 @@ output {
 
 .button-row {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
   margin-top: 8px;
 }
 
 button {
   cursor: pointer;
+  min-height: 58px;
+  line-height: 1.25;
+  text-wrap: balance;
   transition: transform 180ms ease, background 180ms ease, border-color 180ms ease;
 }
 
