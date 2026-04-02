@@ -280,6 +280,47 @@ button.primary {
   margin-top: 22px;
 }
 
+.oscilloscope-panel {
+  margin-top: 22px;
+  padding: 18px;
+  border-radius: 22px;
+  background:
+    linear-gradient(140deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.025)),
+    rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.oscilloscope-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.oscilloscope-heading h3 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.oscilloscope-heading p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+#oscilloscope {
+  display: block;
+  width: 100%;
+  height: 180px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    linear-gradient(180deg, rgba(8, 12, 16, 0.95), rgba(18, 25, 31, 0.95)),
+    linear-gradient(90deg, rgba(243, 181, 98, 0.04), rgba(134, 214, 180, 0.04));
+}
+
 .chord-card {
   padding: 18px;
   border-radius: 22px;
@@ -385,6 +426,11 @@ button.primary {
 
   .button-row {
     grid-template-columns: 1fr;
+  }
+
+  .oscilloscope-heading {
+    flex-direction: column;
+    align-items: flex-start;
   }
 
   .chord-topline {

@@ -149,14 +149,22 @@ const analysisCopy = document.querySelector("#analysis-copy");
 const playButton = document.querySelector("#play-progression");
 const stopButton = document.querySelector("#stop-playback");
 const downloadButton = document.querySelector("#download-midi");
+const oscilloscopeCanvas = document.querySelector("#oscilloscope");
+const oscilloscopeContext = oscilloscopeCanvas?.getContext("2d");
 
 let audioContext;
+let masterGain;
+let analyserNode;
+let oscilloscopeData;
+let oscilloscopeFrame = null;
+let lastOscilloscopeFrameTime = 0;
 const activeOscillators = new Set();
 let hasGeneratedProgression = false;
 
 populateKeys();
 populateScaleTypes();
 syncOutputs();
+drawOscilloscopeIdle();
 generateAndRender();
 
 form.addEventListener("submit", (event) => {
@@ -187,6 +195,15 @@ form.addEventListener("submit", (event) => {
   input.addEventListener("change", () => {
     state.settings = getSettingsFromForm();
   });
+});
+
+window.addEventListener("resize", () => {
+  if (oscilloscopeFrame === null) {
+    drawOscilloscopeIdle();
+    return;
+  }
+
+  drawOscilloscopeFrame();
 });
 
 playButton.addEventListener("click", () => {
@@ -739,6 +756,15 @@ function renderProgression() {
 function ensureAudioContext() {
   if (!audioContext) {
     audioContext = new AudioContext();
+    masterGain = audioContext.createGain();
+    analyserNode = audioContext.createAnalyser();
+    analyserNode.fftSize = 2048;
+    analyserNode.smoothingTimeConstant = 0.72;
+    oscilloscopeData = new Uint8Array(analyserNode.fftSize);
+
+    masterGain.gain.value = 0.9;
+    masterGain.connect(analyserNode);
+    analyserNode.connect(audioContext.destination);
   }
 
   if (audioContext.state === "suspended") {
@@ -757,12 +783,15 @@ function stopPlayback() {
     }
   });
   activeOscillators.clear();
+  stopOscilloscope();
+  drawOscilloscopeIdle();
 }
 
 function playChord(midiNotes, durationSeconds, startTime = 0, waveform = "triangle", velocities = [], articulation = "normal") {
   const context = ensureAudioContext();
   const now = context.currentTime + startTime;
   const profile = getArticulationProfile(articulation);
+  startOscilloscope();
 
   midiNotes.forEach((midi, index) => {
     const frequency = midiToFrequency(midi);
@@ -781,12 +810,16 @@ function playChord(midiNotes, durationSeconds, startTime = 0, waveform = "triang
     gain.gain.exponentialRampToValueAtTime(0.0001, now + durationSeconds);
 
     oscillator.connect(gain);
-    gain.connect(context.destination);
+    gain.connect(masterGain);
     activeOscillators.add(oscillator);
     oscillator.onended = () => {
       activeOscillators.delete(oscillator);
       oscillator.disconnect();
       gain.disconnect();
+      if (!activeOscillators.size) {
+        stopOscilloscope();
+        drawOscilloscopeIdle();
+      }
     };
     oscillator.start(now);
     oscillator.stop(now + durationSeconds + 0.04);
@@ -830,6 +863,137 @@ function buildMidiFile(progression, tempo) {
   ];
 
   return new Uint8Array([...header, ...trackHeader, ...trackEvents]);
+}
+
+function startOscilloscope() {
+  if (!oscilloscopeContext || !analyserNode || oscilloscopeFrame !== null) {
+    return;
+  }
+
+  lastOscilloscopeFrameTime = 0;
+  const renderFrame = (timestamp) => {
+    if (timestamp - lastOscilloscopeFrameTime >= 1000 / 60) {
+      drawOscilloscopeFrame();
+      lastOscilloscopeFrameTime = timestamp;
+    }
+    oscilloscopeFrame = requestAnimationFrame(renderFrame);
+  };
+
+  oscilloscopeFrame = requestAnimationFrame(renderFrame);
+}
+
+function stopOscilloscope() {
+  if (oscilloscopeFrame !== null) {
+    cancelAnimationFrame(oscilloscopeFrame);
+    oscilloscopeFrame = null;
+  }
+}
+
+function drawOscilloscopeFrame() {
+  if (!oscilloscopeContext || !analyserNode || !oscilloscopeData) {
+    return;
+  }
+
+  syncOscilloscopeCanvasSize();
+  analyserNode.getByteTimeDomainData(oscilloscopeData);
+
+  const { width, height } = oscilloscopeCanvas;
+  oscilloscopeContext.clearRect(0, 0, width, height);
+
+  const backgroundGradient = oscilloscopeContext.createLinearGradient(0, 0, 0, height);
+  backgroundGradient.addColorStop(0, "rgba(8, 12, 16, 0.96)");
+  backgroundGradient.addColorStop(1, "rgba(17, 24, 31, 0.96)");
+  oscilloscopeContext.fillStyle = backgroundGradient;
+  oscilloscopeContext.fillRect(0, 0, width, height);
+
+  drawOscilloscopeGrid(width, height);
+
+  oscilloscopeContext.lineWidth = 2.25;
+  oscilloscopeContext.strokeStyle = "#86d6b4";
+  oscilloscopeContext.shadowColor = "rgba(134, 214, 180, 0.45)";
+  oscilloscopeContext.shadowBlur = 10;
+  oscilloscopeContext.beginPath();
+
+  const sliceWidth = width / (oscilloscopeData.length - 1);
+  oscilloscopeData.forEach((sample, index) => {
+    const x = index * sliceWidth;
+    const y = (sample / 255) * height;
+    if (index === 0) {
+      oscilloscopeContext.moveTo(x, y);
+    } else {
+      oscilloscopeContext.lineTo(x, y);
+    }
+  });
+
+  oscilloscopeContext.stroke();
+  oscilloscopeContext.shadowBlur = 0;
+}
+
+function drawOscilloscopeIdle() {
+  if (!oscilloscopeContext) {
+    return;
+  }
+
+  syncOscilloscopeCanvasSize();
+  const { width, height } = oscilloscopeCanvas;
+  oscilloscopeContext.clearRect(0, 0, width, height);
+
+  const backgroundGradient = oscilloscopeContext.createLinearGradient(0, 0, 0, height);
+  backgroundGradient.addColorStop(0, "rgba(8, 12, 16, 0.96)");
+  backgroundGradient.addColorStop(1, "rgba(17, 24, 31, 0.96)");
+  oscilloscopeContext.fillStyle = backgroundGradient;
+  oscilloscopeContext.fillRect(0, 0, width, height);
+
+  drawOscilloscopeGrid(width, height);
+
+  oscilloscopeContext.strokeStyle = "rgba(243, 181, 98, 0.8)";
+  oscilloscopeContext.lineWidth = 1.5;
+  oscilloscopeContext.beginPath();
+  oscilloscopeContext.moveTo(0, height / 2);
+  oscilloscopeContext.lineTo(width, height / 2);
+  oscilloscopeContext.stroke();
+
+  oscilloscopeContext.fillStyle = "rgba(246, 240, 232, 0.7)";
+  oscilloscopeContext.font = '14px "IBM Plex Mono", monospace';
+  oscilloscopeContext.fillText("Signal idle", 18, 28);
+}
+
+function drawOscilloscopeGrid(width, height) {
+  oscilloscopeContext.strokeStyle = "rgba(255, 255, 255, 0.06)";
+  oscilloscopeContext.lineWidth = 1;
+
+  const columns = 12;
+  const rows = 6;
+
+  for (let column = 1; column < columns; column += 1) {
+    const x = (width / columns) * column;
+    oscilloscopeContext.beginPath();
+    oscilloscopeContext.moveTo(x, 0);
+    oscilloscopeContext.lineTo(x, height);
+    oscilloscopeContext.stroke();
+  }
+
+  for (let row = 1; row < rows; row += 1) {
+    const y = (height / rows) * row;
+    oscilloscopeContext.beginPath();
+    oscilloscopeContext.moveTo(0, y);
+    oscilloscopeContext.lineTo(width, y);
+    oscilloscopeContext.stroke();
+  }
+}
+
+function syncOscilloscopeCanvasSize() {
+  if (!oscilloscopeCanvas) {
+    return;
+  }
+
+  const nextWidth = Math.max(320, Math.floor(oscilloscopeCanvas.clientWidth * window.devicePixelRatio));
+  const nextHeight = Math.max(160, Math.floor(oscilloscopeCanvas.clientHeight * window.devicePixelRatio));
+
+  if (oscilloscopeCanvas.width !== nextWidth || oscilloscopeCanvas.height !== nextHeight) {
+    oscilloscopeCanvas.width = nextWidth;
+    oscilloscopeCanvas.height = nextHeight;
+  }
 }
 
 function encodeVariableLength(value) {
